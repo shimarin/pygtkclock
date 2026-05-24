@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Analog Clock
+Name[ja]=アナログ時計
+Comment=A semi-transparent analog desktop clock
+Comment[ja]=半透明のアナログデスクトップ時計
+Exec=@BIN@
+Icon=@ICON@
+Terminal=false
+Categories=Utility;GTK;
+StartupWMClass=@APPID@
