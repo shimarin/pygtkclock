@@ -4,15 +4,13 @@
 import gi
 gi.require_version('Gtk', '4.0')
 gi.require_version('Gdk', '4.0')
-gi.require_version('Gst', '1.0')
-from gi.repository import Gtk, Gdk, GLib, Gio, Gst
+from gi.repository import Gtk, Gdk, GLib, Gio
 import cairo
 import math
 import os
+import subprocess
 import sys
 from datetime import datetime
-
-Gst.init(None)
 
 RESIZE_HANDLE_SIZE = 22
 CHIME_QUIET_START = 22  # 夜10時以降は無音
@@ -25,10 +23,10 @@ CHIME_INTERVAL_MS = 2000  # 打鐘間隔 (ms)
 # 例: ~/.local/share/pygtkclock/chime.ogg, /usr/share/pygtkclock/chime.ogg
 CHIME_SUBDIR = 'pygtkclock'
 CHIME_BASENAME = 'chime'
-# GStreamer playbin が（プラグイン次第で）再生しうる形式を優先順で。
+# pw-play (libsndfile) が再生できる形式を優先順で。
 CHIME_EXTS = (
     'ogg', 'oga', 'opus', 'flac', 'wav',
-    'mp3', 'm4a', 'aac', 'aiff', 'aif', 'wma',
+    'mp3', 'aiff', 'aif',
 )
 
 
@@ -52,11 +50,16 @@ def find_chime_file():
 
 
 class ChimePlayer:
-    """指定ファイルを count 回、2秒間隔で再生する。前の音の終了を待たずに次を鳴らす。"""
+    """指定ファイルを count 回、2秒間隔で再生する。前の音の終了を待たずに次を鳴らす。
+
+    再生は pw-play (PipeWire) のデタッチされた子プロセスに委譲する。
+    主プロセスは起動 (Popen) するだけなので、音声バックエンドが応答
+    しなくなったとしても時計表示 (GTK メインループ) はブロックされない。"""
 
     def __init__(self, sound_file: str):
-        self._uri = f'file://{os.path.abspath(sound_file)}'
+        self._file = os.path.abspath(sound_file)
         self._remaining = 0
+        self._procs = []
 
     def chime(self, count: int):
         if self._remaining > 0:
@@ -68,22 +71,28 @@ class ChimePlayer:
         if self._remaining <= 0:
             return GLib.SOURCE_REMOVE
         self._remaining -= 1
+        self._reap()
         self._play_once()
         if self._remaining > 0:
             GLib.timeout_add(CHIME_INTERVAL_MS, self._fire)
+        else:
+            GLib.timeout_add(10_000, self._reap)
         return GLib.SOURCE_REMOVE
 
     def _play_once(self):
-        player = Gst.ElementFactory.make('playbin', None)
-        player.set_property('uri', self._uri)
-        bus = player.get_bus()
-        bus.add_signal_watch()
-        bus.connect('message::eos',   lambda b, m: player.set_state(Gst.State.NULL))
-        bus.connect('message::error', lambda b, m: (
-            print(f'ChimePlayer error: {m.parse_error()[0]}', file=sys.stderr),
-            player.set_state(Gst.State.NULL)
-        ))
-        player.set_state(Gst.State.PLAYING)
+        try:
+            proc = subprocess.Popen(
+                ['pw-play', self._file],
+                start_new_session=True,
+            )
+        except OSError as e:
+            print(f'ChimePlayer: pw-play 起動失敗: {e}', file=sys.stderr)
+            return
+        self._procs.append(proc)
+
+    def _reap(self):
+        self._procs = [p for p in self._procs if p.poll() is None]
+        return GLib.SOURCE_REMOVE
 
 
 def _pt(cx, cy, r, angle_rad):

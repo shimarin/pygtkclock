@@ -21,15 +21,14 @@ Windows 用の [dotnetclock](https://github.com/shimarin/dotnetclock) と同じ�
 | Python 3 | ランタイム |
 | GTK4 (`gi` / PyGObject) | UI・描画 |
 | Cairo (`pycairo`) | 時計描画 |
-| GStreamer 1.0 (`gi` 経由) | 時報音声再生 |
+| PipeWire (`pw-play`) | 時報音声再生 |
 
 Gentoo の場合:
 
 ```
 dev-python/pygobject
 dev-python/pycairo
-media-libs/gstreamer
-media-plugins/gst-plugins-good   # OGG/Vorbis 再生に必要
+media-video/pipewire             # pw-play を提供
 ```
 
 ## 使い方
@@ -80,8 +79,8 @@ make clean
   探索順は XDG に従い、ユーザー → システムの順:
   - `~/.local/share/pygtkclock/chime.*`（`$XDG_DATA_HOME`）
   - `/usr/local/share/pygtkclock/chime.*`、`/usr/share/pygtkclock/chime.*`（`$XDG_DATA_DIRS`）
-- 拡張子は `ogg oga opus flac wav mp3 m4a aac aiff aif wma` を優先順に探す
-  （実際に鳴らせるかは GStreamer のプラグイン次第。OGG Vorbis 推奨）
+- 拡張子は `ogg oga opus flac wav mp3 aiff aif` を優先順に探す
+  （再生は `pw-play` (libsndfile) が担当。`m4a`/`aac`/`wma` は非対応）
 - ファイルが見つからなければ**無音**で動作する
 - 毎正時に `hour % 12`（または 12）回鳴らす（例: 3時→3回、12時→12回）
 - 各打鐘は **2秒間隔**で発火（前の音の終了を待たない）
